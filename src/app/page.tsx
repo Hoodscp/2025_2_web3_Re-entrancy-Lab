@@ -169,30 +169,30 @@ export default function Home() {
     }
   }
 
-  // Record to Hall of Fame Logic
-  const recordVictory = async (addr: string) => {
-    try {
-      if (!auth.currentUser) return
+  // // Record to Hall of Fame Logic
+  // const recordVictory = async (addr: string) => {
+  //   try {
+  //     if (!auth.currentUser) return
 
-      // 중복 체크 (선택 사항)
-      const q = query(
-        collection(db, 'hall_of_fame'),
-        where('address', '==', addr)
-      )
-      const snapshot = await getDocs(q)
+  //     // 중복 체크 (선택 사항)
+  //     const q = query(
+  //       collection(db, 'hall_of_fame'),
+  //       where('address', '==', addr)
+  //     )
+  //     const snapshot = await getDocs(q)
 
-      if (snapshot.empty) {
-        await addDoc(collection(db, 'hall_of_fame'), {
-          address: addr,
-          clearedAt: serverTimestamp(),
-          level: 'Re-Entrancy',
-        })
-        console.log('Victory recorded to Hall of Fame')
-      }
-    } catch (e) {
-      console.error('Failed to record victory', e)
-    }
-  }
+  //     if (snapshot.empty) {
+  //       await addDoc(collection(db, 'hall_of_fame'), {
+  //         address: addr,
+  //         clearedAt: serverTimestamp(),
+  //         level: 'Re-Entrancy',
+  //       })
+  //       console.log('Victory recorded to Hall of Fame')
+  //     }
+  //   } catch (e) {
+  //     console.error('Failed to record victory', e)
+  //   }
+  // }
 
   const validateLevel = async () => {
     if (!provider || !targetInstance) {
@@ -209,7 +209,7 @@ export default function Home() {
       if (balance === BigInt(0)) {
         addLog('[SUCCESS] Level Cleared! The contract is empty.')
         setIsCleared(true)
-        await recordVictory(account) // Save to Firestore
+        // await recordVictory(account) // Save to Firestore
         alert('성공! NFT 발급 자격을 획득했습니다.')
       } else {
         addLog('[FAILED] Contract still has funds.')
