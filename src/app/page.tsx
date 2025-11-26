@@ -2,14 +2,34 @@
 
 import { useState, useEffect, useRef, ReactNode } from 'react'
 import { ethers } from 'ethers'
+import Link from 'next/link'
 import {
   FACTORY_ADDRESS,
   FACTORY_ABI,
   VULNERABLE_CODE,
 } from '@/app/lib/constants'
 import LogTerminal from './components/LogTerminal'
-import Link from 'next/link' // [추가] 링크 컴포넌트
+import {
+  MatrixRain,
+  CopyButton,
+  AttackCodeModal,
+  SecureCodeComparison,
+  HintSystem,
+  Typewriter,
+} from './components/GameComponents'
+import { Trophy, Code, AlertTriangle, Cpu } from 'lucide-react'
+//import { db, auth } from '@/app/lib/firebase'
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore'
+import { signInAnonymously } from 'firebase/auth'
 
+// Fade Animation Helper
 const FadeInSection = ({
   children,
   delay = 0,
@@ -63,9 +83,18 @@ export default function Home() {
   const [targetInstance, setTargetInstance] = useState('')
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [isCleared, setIsCleared] = useState(false) // [추가] 클리어 상태 관리
+  const [isCleared, setIsCleared] = useState(false)
 
+  // UX States
+  const [showAttackModal, setShowAttackModal] = useState(false)
   const gameSectionRef = useRef<HTMLDivElement>(null)
+
+  // // Firestore & Auth Init
+  // useEffect(() => {
+  //   signInAnonymously(auth).catch((error) =>
+  //     console.error('Auth Error:', error)
+  //   )
+  // }, [])
 
   const scrollToGame = () => {
     gameSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -109,7 +138,6 @@ export default function Home() {
       addLog(`Tx Sent: ${tx.hash}`)
 
       const receipt = await tx.wait()
-
       const iface = new ethers.Interface(FACTORY_ABI)
       let deployedAddress = null
 
@@ -128,7 +156,6 @@ export default function Home() {
       if (deployedAddress) {
         addLog(`Instance Deployed at: ${deployedAddress}`)
         setTargetInstance(deployedAddress)
-        alert(`인스턴스가 생성되었습니다.\n주소: ${deployedAddress}`)
       } else {
         addLog(
           'Instance Deployed, but failed to extract address automatically.'
@@ -142,7 +169,31 @@ export default function Home() {
     }
   }
 
-  // [수정] 정답 검증 및 성공 처리
+  // Record to Hall of Fame Logic
+  const recordVictory = async (addr: string) => {
+    try {
+      if (!auth.currentUser) return
+
+      // 중복 체크 (선택 사항)
+      const q = query(
+        collection(db, 'hall_of_fame'),
+        where('address', '==', addr)
+      )
+      const snapshot = await getDocs(q)
+
+      if (snapshot.empty) {
+        await addDoc(collection(db, 'hall_of_fame'), {
+          address: addr,
+          clearedAt: serverTimestamp(),
+          level: 'Re-Entrancy',
+        })
+        console.log('Victory recorded to Hall of Fame')
+      }
+    } catch (e) {
+      console.error('Failed to record victory', e)
+    }
+  }
+
   const validateLevel = async () => {
     if (!provider || !targetInstance) {
       alert('지갑을 연결하고 인스턴스 주소를 입력해주세요.')
@@ -157,7 +208,8 @@ export default function Home() {
 
       if (balance === BigInt(0)) {
         addLog('[SUCCESS] Level Cleared! The contract is empty.')
-        setIsCleared(true) // 성공 상태 true로 변경
+        setIsCleared(true)
+        await recordVictory(account) // Save to Firestore
         alert('성공! NFT 발급 자격을 획득했습니다.')
       } else {
         addLog('[FAILED] Contract still has funds.')
@@ -170,23 +222,24 @@ export default function Home() {
   }
 
   return (
-    <div className="bg-slate-950 text-green-500 font-mono selection:bg-green-900 selection:text-white overflow-x-hidden h-screen overflow-y-auto scroll-smooth">
-      {/* 1. Hero Section */}
-      <section className="min-h-screen flex flex-col items-center justify-center relative border-b border-green-900/30">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.03)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/50 to-slate-950"></div>
+    <div className="bg-slate-950 text-green-500 font-mono selection:bg-green-900 selection:text-white overflow-x-hidden h-screen overflow-y-auto scroll-smooth relative">
+      <div className="scanlines"></div> {/* CRT Effect */}
+      <MatrixRain /> {/* Matrix Effect */}
+      {/* Hero Section */}
+      <section className="min-h-screen flex flex-col items-center justify-center relative border-b border-green-900/30 z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/80 to-slate-950"></div>
 
         <div className="z-10 text-center space-y-8 p-4">
           <FadeInSection>
             <div className="space-y-2">
-              <p className="text-green-600 tracking-[0.3em] text-sm animate-pulse">
-                SYSTEM STATUS: COMPROMISED
+              <p className="text-green-600 tracking-[0.3em] text-sm animate-pulse flex justify-center gap-2 items-center">
+                <AlertTriangle size={14} /> SYSTEM STATUS: COMPROMISED
               </p>
-              <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]">
+              <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(74,222,128,0.5)] glitch-hover cursor-default">
                 RE-ENTRANCY
               </h1>
               <h2 className="text-2xl md:text-3xl font-bold text-green-600/80">
-                WARGAME_PROTOCOL_V1
+                <Typewriter text="WARGAME_PROTOCOL_V1" delay={100} />
               </h2>
             </div>
           </FadeInSection>
@@ -201,41 +254,37 @@ export default function Home() {
           </FadeInSection>
 
           <FadeInSection delay={600}>
-            <button
-              onClick={scrollToGame}
-              className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-green-600 font-lg hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 ring-offset-slate-900 rounded"
-            >
-              <span className="absolute inset-0 w-full h-full -mt-1 rounded opacity-30 bg-gradient-to-b from-transparent via-transparent to-black"></span>
-              <span className="relative flex items-center gap-3">
-                INITIALIZE HACKING
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5 group-hover:translate-y-1 transition-transform"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={scrollToGame}
+                className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-green-600 font-lg hover:bg-green-500 rounded"
+              >
+                <span className="relative flex items-center gap-3">
+                  INITIALIZE HACKING
+                  <Cpu
+                    size={20}
+                    className="group-hover:rotate-180 transition-transform duration-500"
                   />
-                </svg>
-              </span>
-            </button>
+                </span>
+              </button>
+              <Link
+                href="/hall-of-fame"
+                className="px-8 py-4 border border-green-600 text-green-500 font-bold hover:bg-green-900/30 rounded flex items-center gap-2"
+              >
+                <Trophy size={20} /> HALL OF FAME
+              </Link>
+            </div>
           </FadeInSection>
         </div>
       </section>
-
-      {/* 2. Main Game Section */}
+      {/* Main Game Section */}
       <div
         ref={gameSectionRef}
-        className="min-h-screen py-20 px-4 md:px-10 flex items-center justify-center bg-slate-950 relative"
+        className="min-h-screen py-20 px-4 md:px-10 flex items-center justify-center relative z-10"
       >
         <FadeInSection className="w-full max-w-6xl mx-auto">
-          <div className="border border-green-800/50 shadow-[0_0_50px_rgba(0,255,0,0.05)] bg-slate-900/30 backdrop-blur-sm">
-            <header className="border-b border-green-800 p-6 flex justify-between items-center bg-slate-900/80">
+          <div className="border border-green-800/50 shadow-[0_0_50px_rgba(0,255,0,0.1)] bg-slate-900/90 backdrop-blur-md rounded-lg overflow-hidden">
+            <header className="border-b border-green-800 p-6 flex justify-between items-center bg-black/40">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
                 <h1 className="text-xl font-bold tracking-tighter text-white">
@@ -244,14 +293,14 @@ export default function Home() {
               </div>
               <button
                 onClick={connectWallet}
-                className={`border px-4 py-2 transition-all text-sm font-bold ${
+                className={`border px-4 py-2 rounded transition-all text-sm font-bold ${
                   account
                     ? 'border-green-500 bg-green-500/10 text-green-400'
                     : 'border-green-700 hover:bg-green-800 text-slate-300'
                 }`}
               >
                 {account
-                  ? `CONNECTED: ${account.slice(0, 6)}...${account.slice(-4)}`
+                  ? `CONNECTED: ${account.slice(0, 6)}...`
                   : '[ CONNECT WALLET ]'}
               </button>
             </header>
@@ -266,20 +315,22 @@ export default function Home() {
                     </h2>
                     <div className="text-sm text-slate-300 leading-relaxed space-y-4">
                       <p>
-                        <strong className="text-green-400">목표:</strong> 타겟
-                        컨트랙트의 취약한
-                        <code className="bg-slate-800 px-1 py-0.5 mx-1 rounded text-green-300">
+                        타겟 컨트랙트의 취약한{' '}
+                        <code className="bg-slate-800 px-1 text-green-300">
                           withdraw
-                        </code>
+                        </code>{' '}
                         함수를 이용하여 잔액을 탈취하십시오.
                       </p>
-                      <ol className="list-decimal list-inside space-y-2 text-slate-400 ml-2">
-                        <li>인스턴스 생성 (Create Instance)</li>
-                        <li>Remix IDE 등을 이용해 공격 컨트랙트 배포</li>
-                        <li>재진입(Re-Entrancy) 공격 수행</li>
-                        <li>잔액 검증 (Verify Hack)</li>
-                      </ol>
+                      <button
+                        onClick={() => setShowAttackModal(true)}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded flex items-center gap-2 border border-slate-600 transition-colors"
+                      >
+                        <Code size={14} /> GET ATTACK CODE TEMPLATE
+                      </button>
                     </div>
+
+                    {/* HINT SYSTEM */}
+                    <HintSystem />
                   </div>
                 </FadeInSection>
 
@@ -290,31 +341,45 @@ export default function Home() {
                         VULNERABLE_SOURCE_CODE.sol
                       </span>
                     </div>
-                    <div className="bg-black p-4 border border-green-900/50 text-xs overflow-x-auto rounded shadow-inner custom-scrollbar">
+                    <div className="bg-black p-4 border border-green-900/50 text-xs overflow-x-auto rounded shadow-inner custom-scrollbar relative">
                       <pre className="font-mono text-green-300/90">
                         {VULNERABLE_CODE}
                       </pre>
                     </div>
+
+                    {/* Educational: Secure Code Comparison (Shows after clear or toggle) */}
+                    {isCleared && (
+                      <div className="mt-4">
+                        <p className="text-sm text-green-400 font-bold mb-2">
+                          ✅ 분석 완료: 보안 패치 제안
+                        </p>
+                        <SecureCodeComparison />
+                      </div>
+                    )}
                   </div>
                 </FadeInSection>
               </div>
 
-              <div className="p-8 space-y-8 bg-slate-900/50">
+              <div className="p-8 space-y-8 bg-black/20">
                 <FadeInSection delay={300}>
                   <div className="space-y-4 relative group">
                     <div className="absolute -left-8 top-0 bottom-0 w-1 bg-green-800 group-hover:bg-green-500 transition-colors"></div>
                     <h3 className="text-lg font-bold text-white pl-2">
                       01. TARGET DEPLOYMENT
                     </h3>
-                    <p className="text-xs text-slate-400 pl-2">
-                      Cost: 0.001 Sepolia ETH + Gas
-                    </p>
                     <button
                       onClick={createLevel}
                       disabled={loading || !account}
-                      className="w-full bg-green-600 hover:bg-green-500 text-white py-4 font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(0,255,0,0.2)] hover:shadow-[0_0_25px_rgba(0,255,0,0.4)]"
+                      className="w-full bg-green-900/30 hover:bg-green-600 hover:text-white border border-green-600 text-green-500 py-4 font-bold transition-all disabled:opacity-50"
                     >
-                      {loading ? 'DEPLOYING...' : 'CREATE NEW INSTANCE'}
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span>
+                          DEPLOYING...
+                        </span>
+                      ) : (
+                        'CREATE NEW INSTANCE'
+                      )}
                     </button>
                   </div>
                 </FadeInSection>
@@ -322,29 +387,31 @@ export default function Home() {
                 <FadeInSection delay={500}>
                   <div className="space-y-4 relative group">
                     <div className="absolute -left-8 top-0 bottom-0 w-1 bg-green-800 group-hover:bg-green-500 transition-colors"></div>
-                    <h3 className="text-lg font-bold text-white pl-2">
+                    <h3 className="text-lg font-bold text-white pl-2 flex justify-between">
                       02. VERIFICATION
+                      {targetInstance && (
+                        <CopyButton text={targetInstance} label="ADDR" />
+                      )}
                     </h3>
                     <input
                       type="text"
                       placeholder="Paste Instance Address (0x...)"
                       value={targetInstance}
                       onChange={(e) => setTargetInstance(e.target.value)}
-                      className="w-full bg-slate-950 border border-green-900/50 p-4 text-sm focus:outline-none focus:border-green-500 text-green-400 placeholder-slate-700 transition-colors"
+                      className="w-full bg-slate-950 border border-green-900/50 p-4 text-sm focus:outline-none focus:border-green-500 text-green-400 placeholder-slate-700 transition-colors rounded"
                     />
 
-                    {/* [수정] 성공 여부에 따라 버튼 변경 */}
                     {!isCleared ? (
                       <button
                         onClick={validateLevel}
-                        className="w-full bg-transparent border border-green-600 text-green-500 py-4 hover:bg-green-600 hover:text-white transition-all font-bold"
+                        className="w-full bg-transparent border border-green-600 text-green-500 py-4 hover:bg-green-600 hover:text-white transition-all font-bold rounded"
                       >
                         CHECK BALANCE
                       </button>
                     ) : (
                       <Link
                         href="/nft"
-                        className="block w-full text-center bg-yellow-500 hover:bg-yellow-400 text-black py-4 font-bold transition-all shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-pulse"
+                        className="block w-full text-center bg-yellow-500 hover:bg-yellow-400 text-black py-4 font-bold transition-all shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-pulse rounded"
                       >
                         CLAIM REWARD (MINT NFT) &rarr;
                       </Link>
@@ -362,6 +429,12 @@ export default function Home() {
           </div>
         </FadeInSection>
       </div>
+      {/* Modals */}
+      <AttackCodeModal
+        isOpen={showAttackModal}
+        onClose={() => setShowAttackModal(false)}
+        targetAddress={targetInstance}
+      />
     </div>
   )
 }
