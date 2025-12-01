@@ -18,16 +18,7 @@ import {
   Typewriter,
 } from './components/GameComponents'
 import { Trophy, Code, AlertTriangle, Cpu } from 'lucide-react'
-//import { db, auth } from '@/app/lib/firebase'
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore'
-import { signInAnonymously } from 'firebase/auth'
+import { HOF_CONTRACT_ADDRESS, HOF_ABI } from '@/app/lib/constants'
 
 // Fade Animation Helper
 const FadeInSection = ({
@@ -88,13 +79,6 @@ export default function Home() {
   // UX States
   const [showAttackModal, setShowAttackModal] = useState(false)
   const gameSectionRef = useRef<HTMLDivElement>(null)
-
-  // // Firestore & Auth Init
-  // useEffect(() => {
-  //   signInAnonymously(auth).catch((error) =>
-  //     console.error('Auth Error:', error)
-  //   )
-  // }, [])
 
   const scrollToGame = () => {
     gameSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -169,30 +153,39 @@ export default function Home() {
     }
   }
 
-  // // Record to Hall of Fame Logic
-  // const recordVictory = async (addr: string) => {
-  //   try {
-  //     if (!auth.currentUser) return
+  // Record to Hall of Fame Logic
+  const recordVictory = async (instanceAddr: string) => {
+    try {
+      if (!provider) return
+      const signer = await provider.getSigner()
+      const hofContract = new ethers.Contract(
+        HOF_CONTRACT_ADDRESS,
+        HOF_ABI,
+        signer
+      )
 
-  //     // 중복 체크 (선택 사항)
-  //     const q = query(
-  //       collection(db, 'hall_of_fame'),
-  //       where('address', '==', addr)
-  //     )
-  //     const snapshot = await getDocs(q)
+      // 이미 등록되었는지 확인 (View 함수라 가스비 안 듦)
+      const isRegistered = await hofContract.hasRegistered(
+        await signer.getAddress()
+      )
 
-  //     if (snapshot.empty) {
-  //       await addDoc(collection(db, 'hall_of_fame'), {
-  //         address: addr,
-  //         clearedAt: serverTimestamp(),
-  //         level: 'Re-Entrancy',
-  //       })
-  //       console.log('Victory recorded to Hall of Fame')
-  //     }
-  //   } catch (e) {
-  //     console.error('Failed to record victory', e)
-  //   }
-  // }
+      if (isRegistered) {
+        addLog('이미 명예의 전당에 등록되어 있습니다.')
+        return
+      }
+
+      addLog('명예의 전당(Blockchain)에 기록 중...')
+
+      // 트랜잭션 전송 (인스턴스 주소와 메시지 전송)
+      const tx = await hofContract.register(instanceAddr, 'I hacked this!')
+      await tx.wait()
+
+      addLog('✅ 명예의 전당에 영구 박제되었습니다!')
+    } catch (e) {
+      console.error('Failed to record victory', e)
+      addLog('명예의 전당 등록 실패 (가스비 부족 또는 이미 등록됨)')
+    }
+  }
 
   const validateLevel = async () => {
     if (!provider || !targetInstance) {
@@ -209,7 +202,7 @@ export default function Home() {
       if (balance === BigInt(0)) {
         addLog('[SUCCESS] Level Cleared! The contract is empty.')
         setIsCleared(true)
-        // await recordVictory(account) // Save to Firestore
+        await recordVictory(targetInstance)
         alert('성공! NFT 발급 자격을 획득했습니다.')
       } else {
         addLog('[FAILED] Contract still has funds.')
